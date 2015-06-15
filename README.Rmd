@@ -1,5 +1,12 @@
-#testing rootSolve with the schimel and weintraub 2003 C-only model. 
+Analytically solving a soil C cycling model using the Newton-Raphson method. Implemented using the `stode` function from the `rootSolve` package in R.
+-----
+This Repository is an example of how to use the `stode` funtion in the `rootSolve` package in R, to solve for model outputs at steady-state. I was inspired to do this aftering seeing it used in [Wieder et al. 2015](http://www.geosci-model-dev-discuss.net/8/2011/2015/gmdd-8-2011-2015.pdf) to analytically solve the MIMICS model. I use the "carbon only" model from Schimel and Weintraub 2003 as the example model. The point of this function is to reduce how long model spin-up takes, so you start at steady state before you begin model experiments, or minimize the amount of time required to run the model to steady state. This can take a serious amount of time for models with hourly resolution.
 
+Model Code
+-----
+This is how I code the model and normally run to steady state. 
+
+```{r}
 t= 800 # number of days to run the model for
 day = 0 #start at day 0
 
@@ -40,16 +47,24 @@ for(i in 1:t){
   day = day + 1
   #update output matrix
   out[i,]<- c(day,MBC,EnzC,R)
+  #end model loop
 }
 out<-data.frame(out)
+```
+
+Once the model has run 800 days the pools are near steady state.
+```{r, echo=FALSE}
 par(mfrow=c(1,2))
 plot(MBC~day,data=out,xlab='day',ylab='microbial biomass (mg / g soil)')
 plot(EnzC~day,data=out,xlab='day',ylab='enzyme carbon (mg / g soil)')
+```
 
+Solving the model using `stode`
+-----
+To adapt this model for use with the `stode` function we have to change a few things. First, We need to code the model as a function. Then we need to insert ordinary differential equations for each pool we want `stode` to solve for. Then we need to remove the lines that update the model pools, and how we save outputs. 
+
+```{r}
 require(rootSolve)
-
-#model as a function
-#the model no longer updates pool sizes and iterates through time. It is just a function. At the end we specify the differential equations (dMBC and dEnz), the model will try to solve for (it iterates until the values of these functions is 0)
 model<-function(t,y,pars){
   with(as.list(c(y,pars)),{
     #fluxes!
@@ -67,11 +82,23 @@ model<-function(t,y,pars){
     list(c(dMBC,dEnzC))
   })
 }
+```
+Note the strange bracketing to coax the output into a list. This is a formatting requirement of `stode`. If there is a better way to do this, I would love to hear it!
 
+Now that the model is a function, with two ODEs at the end, we can solve it using Newton-Raphson! YEAH. First you need to specify all the model parameters and starting values for the pools. 
+
+```{r}
 #specify parameter vector for stode
 pars<-c(Kd=Kd,Ke=Ke,Kl=Kl,Km=Km,SUE=SUE,Kes=Kes)
 
 #specify initial pool sizes, you are solving for steady state of these values.
 y<-c(MBC=28,EnzC=1.4)
 
+#run stode
 ST<- stode(y=y,func=model,parms=pars,pos=T)
+```
+If this all works, go ahead and check the output. 
+```{r,echo=F}
+ST
+```
+`stode` solves the model, and gives the precise values at steady state that the 800-day loop was converging towards. 
